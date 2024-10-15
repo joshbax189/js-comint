@@ -85,6 +85,7 @@
 (require 'js)
 (require 'comint)
 (require 'ansi-color)
+(require 'cl-lib)
 
 (defgroup js-comint nil
   "Run a javascript process in a buffer."
@@ -149,6 +150,10 @@ Either nil or a list (VERSION-STRING PATH).")
 
 (declare-function nvm--installed-versions "nvm.el" ())
 (declare-function nvm--find-exact-version-for "nvm.el" (short))
+
+;; company.el declarations
+(defvar company-backends)
+(declare-function company-begin-backend "company.el" (backend &optional callback))
 
 (defun js-comint-list-nvm-versions (prompt)
   "List all available node versions from nvm prompting the user with PROMPT.
@@ -227,6 +232,17 @@ Return a string representing the node version."
         (setq js-comint-module-paths
               (delete dir js-comint-module-paths))
         (message "\"%s\" delete from `js-comint-module-paths'" dir))))))
+
+;;;###autoload
+(defun company-js-comint-backend (command &optional arg &rest _ignored)
+  "Wraps node REPL completion for company."
+  (interactive (list 'interactive))
+  (cl-case command
+    ((interactive) (company-begin-backend 'company-jsc-backend))
+    ((prefix) nil)))
+
+(with-eval-after-load 'company
+  (cl-pushnew #'company-js-comint-backend company-backends))
 
 ;;;###autoload
 (defun js-comint-save-setup ()
