@@ -234,6 +234,59 @@ Return a string representing the node version."
               (delete dir js-comint-module-paths))
         (message "\"%s\" delete from `js-comint-module-paths'" dir))))))
 
+;;;; Completions:
+(defvar js-comint--discard-output nil
+  "If non-nil do not echo REPL output or collect it for completion.
+If set to a function it will be called with the output string.")
+(make-variable-buffer-local 'js-comint--discard-output)
+
+(defvar js-comint--completion-output ""
+  "Buffers completion output.")
+(make-variable-buffer-local 'js-comint--completion-output)
+
+(defvar js-comint--completion-prefix nil
+  "Original input for completion.
+This is used to mark the end of completion output.")
+(make-variable-buffer-local 'js-comint--completion-prefix)
+
+(defun js-comint--reset-completion-state ()
+  "Clear all flags for handling completion output."
+  (when (functionp js-comint--discard-output)
+    (funcall js-comint--discard-output))
+  (setq js-comint--discard-output nil
+        js-comint--completion-output ""
+        js-comint--completion-prefix nil))
+
+;; TODO is this confusing naming?
+(defun js-comint--clear-repl-input ()
+  "Reset input to empty."
+  (setq js-comint--discard-output 't)
+  (comint-send-string
+   (get-buffer-process (current-buffer))
+   ""))
+
+(defun js-comint--completion-filter (output)
+  "Intercepts completions in comint OUTPUT."
+  (prog1 output
+    (when (or js-comint--discard-output) ;; TODO
+      (setq js-comint--completion-output (concat js-comint--completion-output output)
+            output ""))
+    ;; test exit conditions
+    ;; - saw a control sequence
+    ;; - saw the completion prefix
+    ;; TODO completion prefix is not set when using discard-output
+    (when (or (string-match-p "\\[[[:digit:]]+[AG]$" js-comint--completion-output)
+              (equal js-comint--completion-prefix js-comint--completion-output))
+      ;; work out which handler to call
+      (cond
+       (js-comint--discard-output
+        (when (functionp js-comint--discard-output)
+          (funcall js-comint--discard-output js-comint--completion-output)
+          (setq js-comint--discard-output nil
+                js-comint--completion-output "")))
+       ;; TODO company handler
+       (t (js-comint--reset-completion-state))))))
+
 (defun js-comint--current-input ()
   "Return current comint input relative to point.
 Nil if point is before the current prompt."
@@ -475,6 +528,7 @@ If no region selected, you could manually input javascript expression."
   ;; Ignore duplicates
   (setq comint-input-ignoredups t)
   (add-hook 'comint-output-filter-functions 'js-comint-filter-output nil t)
+  (add-hook 'comint-preoutput-filter-functions #'js-comint--completion-filter nil t)
   (process-put (js-comint-get-process)
                'adjust-window-size-function (lambda (_process _windows) ()))
   (use-local-map js-comint-mode-map)
