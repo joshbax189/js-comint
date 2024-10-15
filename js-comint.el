@@ -154,6 +154,7 @@ Either nil or a list (VERSION-STRING PATH).")
 ;; company.el declarations
 (defvar company-backends)
 (declare-function company-begin-backend "company.el" (backend &optional callback))
+(declare-function company-in-string-or-comment "company.el" nil)
 
 (defun js-comint-list-nvm-versions (prompt)
   "List all available node versions from nvm prompting the user with PROMPT.
@@ -233,13 +234,38 @@ Return a string representing the node version."
               (delete dir js-comint-module-paths))
         (message "\"%s\" delete from `js-comint-module-paths'" dir))))))
 
+(defun js-comint--current-input ()
+  "Return current comint input relative to point.
+Nil if point is before the current prompt."
+  (let ((pmark (process-mark (get-buffer-process (current-buffer)))))
+    (when (>= (point) (marker-position pmark))
+	    (buffer-substring pmark (point)))))
+
+;; NOTE: remove company dependency here if supporting other completion methods
+(defun js-comint--should-complete ()
+  "Non-nil if completion should be attempted on text before point."
+  (cond
+   ((company-in-string-or-comment)
+    nil)
+   ((looking-back "\\." (line-beginning-position))
+    't)
+   ((looking-back "[[:punct:]]" (line-beginning-position))
+    nil)
+   (t
+    't)))
+
 ;;;###autoload
 (defun company-js-comint-backend (command &optional arg &rest _ignored)
   "Wraps node REPL completion for company."
   (interactive (list 'interactive))
   (cl-case command
-    ((interactive) (company-begin-backend 'company-jsc-backend))
-    ((prefix) nil)))
+    ((interactive)
+     (company-begin-backend 'company-jsc-backend))
+    ((prefix)
+     (when (equal major-mode 'js-comint-mode)
+       (if (js-comint--should-complete)
+           (js-comint--current-input)
+         'stop)))))
 
 (with-eval-after-load 'company
   (cl-pushnew #'company-js-comint-backend company-backends))
