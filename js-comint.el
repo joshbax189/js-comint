@@ -237,7 +237,9 @@ Return a string representing the node version."
 ;;;; Completions:
 (defvar js-comint--discard-output nil
   "If non-nil do not echo REPL output or collect it for completion.
-If set to a function it will be called with the output string.")
+This applies until the next prompt or control char in the output.
+If set to a function, it will be called with no arguments after
+discarding all output.")
 (make-variable-buffer-local 'js-comint--discard-output)
 
 (defvar js-comint--completion-output ""
@@ -264,11 +266,11 @@ This is used to mark the end of completion output.")
         js-comint--completion-output ""
         js-comint--completion-prefix nil))
 
-(defun js-comint--clear-repl-input (&optional cb)
+(defun js-comint--clear-repl-input (&optional callback)
   "Clear input already sent to the REPL.
 This is used specifically to remove input used to trigger completion.
-CB allows chaining an action after clearing."
-  (setq js-comint--discard-output (or cb 't))
+CALLBACK allows chaining an action after clearing."
+  (setq js-comint--discard-output (or callback 't))
   (comint-send-string
    (get-buffer-process (current-buffer))
    ""))
@@ -323,7 +325,7 @@ PREFIX is the original completion prefix string."
   (when js-comint--discard-output
     (when (string-match-p "\\[[[:digit:]]+[AG]$" output)
       (when (functionp js-comint--discard-output)
-        (funcall js-comint--discard-output output))
+        (funcall js-comint--discard-output))
       (setq js-comint--discard-output nil))
     (setq output ""))
 
