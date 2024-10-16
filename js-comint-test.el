@@ -169,3 +169,47 @@ reduce((prev, curr) => prev + curr, 0);" "^9$")))
       (setq js-comint-program-command original-command-value
             js-use-nvm original-use-jvm-value
             js-nvm-current-version original-nvm-version))))
+
+(ert-deftest js-comint--process-completion-output/test-globals ()
+  "Completing an empty string."
+  (should
+   (equal
+    (js-comint--process-completion-output
+     " 
+AbortController                   AbortSignal                       AggregateError                    Array
+
+constructor
+
+[1G[0J> 	[9G"
+     "")
+    '("AbortController"
+      "AbortSignal"
+      "AggregateError"
+      "Array"
+      "constructor"))))
+
+(ert-deftest js-comint--process-completion-output/test-single-completion ()
+  "Completion of \"Arr\" yields a single result and type info."
+  (should (equal (js-comint--process-completion-output
+                  "Array
+// [Function: Array][8G[1A"
+                  "Arr")
+                 '("Array"))))
+
+(ert-deftest js-comint--process-completion-output/test-method-completion ()
+  "Completion of object properties should give list of properties prefixed with name."
+  (should
+   (equal
+    (js-comint--process-completion-output
+     "Array.
+Array.__proto__             Array.hasOwnProperty        Array.isPrototypeOf         Array.propertyIsEnumerable  Array.toLocaleString
+Array.valueOf
+
+[1G[0J> Array.[9G"
+     "Array.")
+    '("Array.__proto__"
+      "Array.hasOwnProperty"
+      "Array.isPrototypeOf"
+      "Array.propertyIsEnumerable"
+      "Array.toLocaleString"
+      "Array.valueOf"))))
