@@ -213,3 +213,30 @@ Array.valueOf
       "Array.propertyIsEnumerable"
       "Array.toLocaleString"
       "Array.valueOf"))))
+
+(ert-deftest js-comint--completion-filter/test-discard ()
+  "Output should be discarded."
+  (with-temp-buffer
+    (js-comint--reset-completion-state)
+    (setq js-comint--discard-output 't)
+    ;; each should be empty
+    (dolist (res (list (js-comint--completion-filter "foo")
+                       (js-comint--completion-filter "bar")
+                       (js-comint--completion-filter "[1G")))
+     (should (string-empty-p res)))
+    ;; then the the flag should be cleared
+    (should-not js-comint--discard-output)))
+
+(ert-deftest js-comint--completion-filter/test-discard-with-completion ()
+  "Output should be discarded even when completion callback is set."
+  (with-temp-buffer
+    (js-comint--reset-completion-state)
+    (setq js-comint--discard-output 't)
+    (setq js-comint--post-completion-cb #'ignore)
+    ;; each should be empty
+    (dolist (res (list (js-comint--completion-filter "foo")
+                       (js-comint--completion-filter "bar")
+                       (js-comint--completion-filter "[1G")))
+      (should (string-empty-p res)))
+    ;; the output should not be accumulated
+    (should (string-empty-p js-comint--completion-output))))

@@ -320,12 +320,12 @@ PREFIX is the original completion prefix string."
   (message "|%s|" output)
 
   ;; discard should work independently so that clear-repl-input can be used
-  (when (and js-comint--discard-output
-             (string-match-p "\\[[[:digit:]]+[AG]$" output))
-    (when (functionp js-comint--discard-output)
-      (funcall js-comint--discard-output output))
-    (setq js-comint--discard-output nil
-          output ""))
+  (when js-comint--discard-output
+    (when (string-match-p "\\[[[:digit:]]+[AG]$" output)
+      (when (functionp js-comint--discard-output)
+        (funcall js-comint--discard-output output))
+      (setq js-comint--discard-output nil))
+    (setq output ""))
 
   (when js-comint--post-completion-cb
     (message "collecting output")
