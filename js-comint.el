@@ -269,7 +269,7 @@ This is used specifically to remove input used to trigger completion.
 CALLBACK allows chaining an action after clearing."
   (setq js-comint--discard-output (or callback 't))
   (comint-send-string
-   (get-buffer-process (current-buffer))
+   (js-comint-get-process)
    ""))
 
 (defun js-comint--get-completion (input-string callback)
@@ -282,11 +282,11 @@ CALLBACK allows chaining an action after clearing."
   ;; 1st tab usually does common prefix
   (when (string-empty-p input-string)
     (comint-send-string
-     (get-buffer-process (current-buffer))
+     (js-comint-get-process)
      "\t"))
 
   (comint-send-string
-   (get-buffer-process (current-buffer))
+   (js-comint-get-process)
    (format "%s\t" input-string)))
 
 (defun js-comint--process-completion-output (completion prefix)
@@ -336,7 +336,7 @@ PREFIX is the original completion prefix string."
       ;; Completions like Array. seem to need a second tab after the response
       (if (string-suffix-p "." js-comint--completion-prefix)
           (comint-send-string
-           (get-buffer-process (current-buffer))
+           (js-comint-get-process)
            "\t")
         ;; Otherwise there was no match, so reset
         (setq js-comint--completion-prefix nil)
@@ -360,7 +360,7 @@ PREFIX is the original completion prefix string."
 (defun js-comint--grab-input-line ()
   "Return current comint input relative to point.
 Nil if point is before the current prompt."
-  (let ((pmark (process-mark (get-buffer-process (current-buffer)))))
+  (let ((pmark (process-mark (js-comint-get-process))))
     (when (>= (point) (marker-position pmark))
 	    (buffer-substring pmark (point)))))
 
