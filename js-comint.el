@@ -301,10 +301,16 @@ PREFIX is the original completion prefix string."
        (list (car completion-res)))
 
      ;; When completing, e.g "console.", the prefix is included in every completion.
-     ;; TODO for console.[name] completion, want name to display in list, but console.name as completion
+     ;; For console.[name] completion, want name to display in list, but console.name as completion,
+     ;; so store original as a string property.
      ((string-suffix-p "." prefix)
-       (cdr ;; first is always the prefix in this case
-        (seq-map (apply-partially #'string-remove-prefix prefix) completion-res)))
+      (cdr ;; first is always the prefix in this case
+       (seq-map
+        (lambda (x)
+          (let* ((original x)
+                 (method (string-remove-prefix prefix original)))
+            (propertize original 'completion method)))
+        completion-res)))
 
      ('t
       completion-res))))
