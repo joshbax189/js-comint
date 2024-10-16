@@ -264,9 +264,9 @@ This is used to mark the end of completion output.")
         js-comint--completion-output ""
         js-comint--completion-prefix nil))
 
-;; TODO is this confusing naming?
 (defun js-comint--clear-repl-input (&optional cb)
-  "Reset input to empty.
+  "Clear input already sent to the REPL.
+This is used specifically to remove input used to trigger completion.
 CB allows chaining an action after clearing."
   (setq js-comint--discard-output (or cb 't))
   (comint-send-string
@@ -275,7 +275,6 @@ CB allows chaining an action after clearing."
 
 (defun js-comint--get-completion (input-string callback)
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
-  ;; TODO reset or don't start if a completion is running?
   (js-comint--reset-completion-state)
   (setq js-comint--post-completion-cb callback
         js-comint--completion-prefix input-string)
@@ -294,58 +293,54 @@ CB allows chaining an action after clearing."
 (defun js-comint--completion-filter (output)
   "Intercepts completions in comint OUTPUT."
   (message "|%s|" output)
-  (when (or js-comint--discard-output
-            js-comint--post-completion-cb)
+
+  ;; discard should work independently so that clear-repl-input can be used
+  (when (and js-comint--discard-output
+             (string-match-p "\\[[[:digit:]]+[AG]$" output))
+    (when (functionp js-comint--discard-output)
+      (funcall js-comint--discard-output output))
+    (setq js-comint--discard-output nil
+          output ""))
+
+  (when js-comint--post-completion-cb
     (message "collecting output")
-    (unless js-comint--discard-output
-      (setq js-comint--completion-output (concat js-comint--completion-output output)))
-    (setq output "")
+    (setq js-comint--completion-output (concat js-comint--completion-output output)
+          output "")
     ;; test exit conditions
-    ;; TODO completion prefix is not set when using discard-output
-    ;;      is this a problem?
     (when (equal js-comint--completion-prefix js-comint--completion-output)
       (message "exact match output")
       ;; Completions like Array. seem to need a second tab after the response
       (if (string-suffix-p "." js-comint--completion-prefix)
-          (progn
-            (message "send double tab")
-            (comint-send-string
-             (get-buffer-process (current-buffer))
-             "\t"))
+          (comint-send-string
+           (get-buffer-process (current-buffer))
+           "\t")
         ;; Otherwise there was no match, so reset
         (setq js-comint--completion-prefix nil)
-        (js-comint--clear-repl-input)
-        ))
+        (funcall js-comint--post-completion-cb nil)
+        (setq js-comint--post-completion-cb nil)
+        ;; note: reset must be called before clear
+        (js-comint--reset-completion-state)
+        (js-comint--clear-repl-input)))
     (when (string-match-p "\\[[[:digit:]]+[AG]$" js-comint--completion-output)
-      ;; work out which handler to call
-      (cond
-       (js-comint--discard-output
-        (message "discard")
-        (when (functionp js-comint--discard-output)
-          (funcall js-comint--discard-output js-comint--completion-output))
-        (setq js-comint--discard-output nil
-              js-comint--completion-output ""))
-       (js-comint--post-completion-cb
-        ;; normal completion
-        (message "candidates")
-        (let* ((completion-res (string-split js-comint--completion-output nil 't))
-               (completion-res (seq-remove (apply-partially #'string-prefix-p "") completion-res))
-               ;; special case of exact match
-               ;; node seems to print type info in comment format
-               (completion-res (if (equal "//" (elt completion-res 1))
-                                   (list (car completion-res))
-                                 completion-res))
-               ;; when completing console. the prefix is included in completions
-               ;; TODO for console.[name] completion, want name to display in list, but console.name as completion
-               (completion-res (if (string-suffix-p "." js-comint--completion-prefix)
-                                   (seq-map (apply-partially #'string-remove-prefix js-comint--completion-prefix) completion-res)
-                                 completion-res)))
-          ;; this clears the input used to trigger completion
-          (print completion-res)
-          (funcall js-comint--post-completion-cb completion-res)
-          (setq js-comint--post-completion-cb nil)
-          (js-comint--clear-repl-input))
-        (js-comint--reset-completion-state)))))
+      (message "candidates")
+      (let* ((completion-res (string-split js-comint--completion-output nil 't))
+             (completion-res (seq-remove (apply-partially #'string-prefix-p "") completion-res))
+             ;; special case of exact match
+             ;; node seems to print type info in comment format
+             (completion-res (if (equal "//" (elt completion-res 1))
+                                 (list (car completion-res))
+                               completion-res))
+             ;; when completing console. the prefix is included in completions
+             ;; TODO for console.[name] completion, want name to display in list, but console.name as completion
+             (completion-res (if (string-suffix-p "." js-comint--completion-prefix)
+                                 (seq-map (apply-partially #'string-remove-prefix js-comint--completion-prefix) completion-res)
+                               completion-res)))
+        ;; this clears the input used to trigger completion
+        (print completion-res)
+        (funcall js-comint--post-completion-cb completion-res)
+        (setq js-comint--post-completion-cb nil)
+        (js-comint--reset-completion-state)
+        (js-comint--clear-repl-input))))
   output)
 
 (defun js-comint--current-input ()
