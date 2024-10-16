@@ -240,3 +240,61 @@ Array.valueOf
       (should (string-empty-p res)))
     ;; the output should not be accumulated
     (should (string-empty-p js-comint--completion-output))))
+
+(ert-deftest js-comint--completion-filter/test-no-completion ()
+  "Output should be saved until string match, then fail."
+  (with-mock
+    (mock (ignore nil)) ;; must be called
+    (mock (js-comint--clear-repl-input))
+    (with-temp-buffer
+      (js-comint--reset-completion-state)
+      (setq js-comint--post-completion-cb #'ignore
+            js-comint--completion-prefix "foo")
+
+      ;; each should be empty
+      (dolist (res (list (js-comint--completion-filter "f")
+                         (js-comint--completion-filter "oo")))
+        (should (string-empty-p res)))
+      ;; callback should be called with nil
+      ;; clear should be called
+      ;; then the the flag should be cleared
+      (should-not js-comint--post-completion-cb))))
+
+(ert-deftest js-comint--completion-filter/test-list-completion ()
+  "Output should be saved until control char, then list returned."
+  (with-mock
+    ;; callback should be called with completions
+    (mock (ignore '("foobar" "foobaz")))
+    (mock (js-comint--clear-repl-input))
+    (with-temp-buffer
+      (js-comint--reset-completion-state)
+      (setq js-comint--post-completion-cb #'ignore
+            js-comint--completion-prefix "foo")
+
+      ;; each should be empty
+      (dolist (res (list (js-comint--completion-filter "foobar foobaz")
+                         (js-comint--completion-filter "[1G[0J> foo[3G")))
+        (should (string-empty-p res)))
+
+      ;; clear should be called
+      ;; then the the flag should be cleared
+      (should-not js-comint--post-completion-cb))))
+
+(ert-deftest js-comint--completion-filter/test-double-tab ()
+  "When completing object properties, send another tab to get completion."
+  (with-mock
+    (stub js-comint-get-process)
+    (mock (comint-send-string * "\t"))
+    (with-temp-buffer
+      (js-comint--reset-completion-state)
+      (setq js-comint--post-completion-cb #'ignore
+            js-comint--completion-prefix "foo.")
+
+      ;; each should be empty
+      (dolist (res (list (js-comint--completion-filter "f")
+                         (js-comint--completion-filter "oo.")))
+        (should (string-empty-p res)))
+      ;; after sending tab should be ready to recieve completion
+      (should js-comint--post-completion-cb)
+      (should (equal js-comint--completion-prefix "foo."))
+      (should (equal js-comint--completion-output "foo.")))))
