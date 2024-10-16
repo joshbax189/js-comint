@@ -290,6 +290,25 @@ CB allows chaining an action after clearing."
    (get-buffer-process (current-buffer))
    (format "%s\t" input-string)))
 
+(defun js-comint--process-completion-output (completion prefix)
+  "Format COMPLETION string as a list of candidates.
+PREFIX is the original completion prefix string."
+  (let* ((completion-res (split-string completion nil 't))
+         (completion-res (seq-remove (apply-partially #'string-search "") completion-res)))
+    (cond
+     ;; For an exact match the response is: MATCH^M// type info^M^[[...PROMPT
+     ((equal "//" (elt completion-res 1))
+       (list (car completion-res)))
+
+     ;; When completing, e.g "console.", the prefix is included in every completion.
+     ;; TODO for console.[name] completion, want name to display in list, but console.name as completion
+     ((string-suffix-p "." prefix)
+       (cdr ;; first is always the prefix in this case
+        (seq-map (apply-partially #'string-remove-prefix prefix) completion-res)))
+
+     ('t
+      completion-res))))
+
 (defun js-comint--completion-filter (output)
   "Intercepts completions in comint OUTPUT."
   (message "|%s|" output)
@@ -323,23 +342,12 @@ CB allows chaining an action after clearing."
         (js-comint--clear-repl-input)))
     (when (string-match-p "\\[[[:digit:]]+[AG]$" js-comint--completion-output)
       (message "candidates")
-      (let* ((completion-res (string-split js-comint--completion-output nil 't))
-             (completion-res (seq-remove (apply-partially #'string-prefix-p "") completion-res))
-             ;; special case of exact match
-             ;; node seems to print type info in comment format
-             (completion-res (if (equal "//" (elt completion-res 1))
-                                 (list (car completion-res))
-                               completion-res))
-             ;; when completing console. the prefix is included in completions
-             ;; TODO for console.[name] completion, want name to display in list, but console.name as completion
-             (completion-res (if (string-suffix-p "." js-comint--completion-prefix)
-                                 (seq-map (apply-partially #'string-remove-prefix js-comint--completion-prefix) completion-res)
-                               completion-res)))
-        ;; this clears the input used to trigger completion
+      (let ((completion-res (js-comint--process-completion-output js-comint--completion-output js-comint--completion-prefix)))
         (print completion-res)
         (funcall js-comint--post-completion-cb completion-res)
         (setq js-comint--post-completion-cb nil)
         (js-comint--reset-completion-state)
+        ;; this clears the input used to trigger completion
         (js-comint--clear-repl-input))))
   output)
 
