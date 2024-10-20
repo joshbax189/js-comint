@@ -591,6 +591,11 @@ If no region selected, you could manually input javascript expression."
     (define-key map (kbd "C-c C-c") 'js-comint-quit-or-cancel)
     map))
 
+(defun js-comint-unload-function ()
+  "Cleanup mode settings."
+  (when company-backends
+    (setq company-backends
+          (delete #'company-js-comint-backend company-backends))))
 
 ;;;###autoload
 (define-derived-mode js-comint-mode comint-mode "Javascript REPL"
