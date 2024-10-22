@@ -4,56 +4,66 @@
 (require 'ert)
 (require 'el-mock)
 
-(defun js-comint-test-buffer-matches (regex)
-  "Search the js-comint buffer for the given regular expression.
-Return 't if a match is found, nil otherwise."
-  (with-current-buffer (js-comint-get-buffer)
-    (save-excursion
-      (goto-char (point-min))
-      (if (re-search-forward regex nil t) t nil))))
-
 (defun js-comint-test-output-matches (input regex)
   "Verify that sending INPUT yields output that matches REGEX."
+  (with-new-js-comint-buffer
+    (js-comint-send-string input)
+    (sit-for 1)
+    (let ((output (buffer-substring-no-properties
+                   comint-last-input-end
+                   (car comint-last-prompt))))
+      (should (string-match-p regex output)))))
 
-  ;; Start an instance to run tests on.
-  (js-comint-reset-repl)
-
-  (sit-for 1)
-
-  (js-comint-send-string input)
-
-  (sit-for 1)
-
-  (js-comint-test-buffer-matches regex))
-
-(defun js-comint-test-exit-comint ()
-  "Finish process."
-  (when (js-comint-get-process)
-    (process-send-string (js-comint-get-process) ".exit\n")
-    (sit-for 1)))
+(defmacro with-new-js-comint-buffer (&rest body)
+  "Run BODY with a fresh js-comint as current buffer and exit after."
+  (declare (indent 0) (debug t))
+  `(progn
+     (when (js-comint-get-process)
+       (kill-process (js-comint-get-process)))
+     (sleep-for 0.2)
+     (kill-matching-buffers-no-ask (js-comint-get-buffer-name))
+     (run-js)
+     (unwind-protect
+         (with-current-buffer (js-comint-get-buffer)
+           (font-lock-mode -1)
+           (sit-for 1) ;; prevent race condition on start
+           ,@body)
+       (when (js-comint-get-process)
+         (kill-process (js-comint-get-process)))
+       (sleep-for 0.2)
+       (kill-matching-buffers-no-ask (js-comint-get-buffer-name)))))
 
 (ert-deftest js-comint-test-multiline-dotchain-line-start ()
   "Test multiline statement with dots at beginning of lines."
-  (should (js-comint-test-output-matches "[1, 2, 3]
+  (js-comint-test-output-matches
+   "[1, 2, 3]
   .map((it) => it + 1)
   .filter((it) => it > 0)
-  .reduce((prev, curr) => prev + curr, 0);" "^9$")))
+  .reduce((prev, curr) => prev + curr, 0);"
+   ;; output
+   "^9$"))
 
 (ert-deftest js-comint-test-multiline-dotchain-line-start-dos ()
   "Test multiline statement with dots at beginning of lines, with
 DOS line separators."
-  (should (js-comint-test-output-matches "[1, 2, 3]\r
+  (js-comint-test-output-matches
+   "[1, 2, 3]\r
   .map((it) => it + 1)\r
   .filter((it) => it > 0)\r
   .reduce((prev, curr) => prev + curr, 0);\r
-" "^9$")))
+"
+   ;; output
+   "^9$"))
 
 (ert-deftest js-comint-test-multiline-dotchain-line-end ()
   "Test multiline statement with dots at end of lines."
-  (should (js-comint-test-output-matches "[1, 2, 3].
+  (js-comint-test-output-matches
+   "[1, 2, 3].
 map((it) => it + 1).
 filter((it) => it > 0).
-reduce((prev, curr) => prev + curr, 0);" "^9$")))
+reduce((prev, curr) => prev + curr, 0);"
+   ;; output
+   "^9$"))
 
 (ert-deftest js-comint-start-or-switch-to-repl/test-no-modules ()
   "Should preserve node_path when nothing is set."
@@ -65,15 +75,11 @@ reduce((prev, curr) => prev + curr, 0);" "^9$")))
           (setq js-comint-module-paths nil
                 js-comint-set-env-when-startup nil)
           (setenv "NODE_PATH" "/foo/bar")
-          (js-comint-test-exit-comint)
-          (js-comint-start-or-switch-to-repl)
-          (sit-for 1)
-          (js-comint-send-string "process.env['NODE_PATH'];")
-          (js-comint-test-buffer-matches "/foo/bar"))
+          (js-comint-test-output-matches "process.env['NODE_PATH'];"
+                                         "/foo/bar"))
       (setq js-comint-module-paths original
             js-comint-set-env-when-startup original-set-env)
-      (setenv "NODE_PATH" original-env)
-      (js-comint-test-exit-comint))))
+      (setenv "NODE_PATH" original-env))))
 
 (ert-deftest js-comint-start-or-switch-to-repl/test-global-set ()
   "Should include the value of `js-comint-node-modules' if set."
@@ -85,15 +91,11 @@ reduce((prev, curr) => prev + curr, 0);" "^9$")))
           (setq js-comint-module-paths '("/baz/xyz")
                 js-comint-set-env-when-startup nil)
           (setenv "NODE_PATH" "/foo/bar")
-          (js-comint-test-exit-comint)
-          (js-comint-start-or-switch-to-repl)
-          (sit-for 1)
-          (js-comint-send-string "process.env['NODE_PATH'];")
-          (js-comint-test-buffer-matches (concat "/foo/bar" (js-comint--path-sep) "/baz/xyz")))
+          (js-comint-test-output-matches "process.env['NODE_PATH'];"
+                                         (concat "/foo/bar" (js-comint--path-sep) "/baz/xyz")))
       (setq js-comint-module-paths original
             js-comint-set-env-when-startup original-set-env)
-      (setenv "NODE_PATH" original-env)
-      (js-comint-test-exit-comint))))
+      (setenv "NODE_PATH" original-env))))
 
 (ert-deftest js-comint-start-or-switch-to-repl/test-local ()
   "Should include the optional node-modules-path."
@@ -107,16 +109,12 @@ reduce((prev, curr) => prev + curr, 0);" "^9$")))
           (setq js-comint-module-paths '()
                 js-comint-set-env-when-startup 't)
           (setenv "NODE_PATH" "/foo/bar")
-          (js-comint-test-exit-comint)
-          (js-comint-start-or-switch-to-repl)
-          (sit-for 1)
-          (js-comint-send-string "process.env['NODE_PATH'];")
-          (js-comint-test-buffer-matches (concat "/foo/bar" (js-comint--path-sep) "/baz/xyz")))
+          (js-comint-test-output-matches "process.env['NODE_PATH'];"
+                                         (concat "/foo/bar" (js-comint--path-sep) "/baz/xyz")))
       (setq js-comint-module-paths original
             js-comint-set-env-when-startup original-set-env)
       (setenv "NODE_PATH" original-env)
-      (fset 'js-comint--suggest-module-path original-suggest)
-      (js-comint-test-exit-comint))))
+      (fset 'js-comint--suggest-module-path original-suggest))))
 
 (ert-deftest js-comint/test-strict-mode ()
   "When NODE_REPL_MODE=strict should use strict mode."
