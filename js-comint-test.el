@@ -3,6 +3,7 @@
 (require 'js-comint)
 (require 'ert)
 (require 'el-mock)
+(require 'company) ;; for should-complete
 
 (defun js-comint-test-output-matches (input regex)
   "Verify that sending INPUT yields output that matches REGEX."
@@ -167,6 +168,47 @@ reduce((prev, curr) => prev + curr, 0);"
       (setq js-comint-program-command original-command-value
             js-use-nvm original-use-jvm-value
             js-nvm-current-version original-nvm-version))))
+
+(ert-deftest js-comint--current-input/test ()
+  "Tests default behavior."
+  (with-new-js-comint-buffer
+   (insert "Array")
+   (should (equal (js-comint--current-input) "Array"))
+   (comint-send-input)
+   (should (equal (js-comint--current-input) ""))
+   (goto-char (point-min))
+   (should (equal (js-comint--current-input) nil))))
+
+(ert-deftest js-comint--should-complete/test ()
+  "Tests default behavior."
+(with-new-js-comint-buffer
+  (insert "Arr")
+  (should (js-comint--should-complete))
+  (comint-kill-input)
+
+  (insert "Array.")
+  (should (js-comint--should-complete))
+  (comint-kill-input)
+
+  ;; empty line
+  (should (js-comint--should-complete))
+
+  (insert "// a comment")
+  (should-not (js-comint--should-complete))
+  (comint-kill-input)
+
+  (insert "\"foo")
+  (should-not (js-comint--should-complete))
+  (comint-kill-input)
+
+  (insert "[1,2,")
+  (should-not (js-comint--should-complete))
+  (comint-kill-input)
+
+  ;; (insert "let foo")
+  ;; (should-not (js-comint--should-complete))
+  ;; (comint-kill-input)
+  ))
 
 (ert-deftest js-comint--process-completion-output/test-globals ()
   "Completing an empty string."

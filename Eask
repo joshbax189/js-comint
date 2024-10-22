@@ -16,4 +16,5 @@
 
 (development
  (depends-on "el-mock")
- (depends-on "nvm"))
+ (depends-on "nvm")
+ (depends-on "company"))
