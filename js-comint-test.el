@@ -22,7 +22,7 @@
      (when (js-comint-get-process)
        (kill-process (js-comint-get-process)))
      (sleep-for 0.2)
-     (kill-matching-buffers-no-ask (js-comint-get-buffer-name))
+     (kill-matching-buffers (js-comint-get-buffer-name) nil t)
      (run-js)
      (unwind-protect
          (with-current-buffer (js-comint-get-buffer)
@@ -32,7 +32,7 @@
        (when (js-comint-get-process)
          (kill-process (js-comint-get-process)))
        (sleep-for 0.2)
-       (kill-matching-buffers-no-ask (js-comint-get-buffer-name)))))
+       (kill-matching-buffers (js-comint-get-buffer-name) nil t))))
 
 (ert-deftest js-comint-test-multiline-dotchain-line-start ()
   "Test multiline statement with dots at beginning of lines."
