@@ -366,18 +366,19 @@ Nil if point is before the current prompt."
     (when (>= (point) (marker-position pmark))
 	    (buffer-substring pmark (point)))))
 
-;; NOTE: remove company dependency here if supporting other completion methods
 (defun js-comint--should-complete ()
   "Non-nil if completion should be attempted on text before point."
-  (cond
-   ((company-in-string-or-comment)
-    nil)
-   ((looking-back "\\." (line-beginning-position))
-    't)
-   ((looking-back "[[:punct:]]" (line-beginning-position))
-    nil)
-   (t
-    't)))
+  (let* ((parse (syntax-ppss))
+         (string-or-comment (or (nth 3 parse) (nth 4 parse) (nth 7 parse))))
+   (cond
+    (string-or-comment
+     nil)
+    ((looking-back "\\." (line-beginning-position))
+     't)
+    ((looking-back "[[:punct:]]" (line-beginning-position))
+     nil)
+    (t
+     't))))
 
 ;;;###autoload
 (defun company-js-comint-backend (command &optional arg &rest _ignored)
