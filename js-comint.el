@@ -271,7 +271,7 @@ This is used to mark the end of completion output.")
 This is used specifically to remove input used to trigger completion.
 CALLBACK allows chaining an action after clearing."
   (setq js-comint--discard-output (or callback 't))
-  (comint-send-string
+  (process-send-string
    (js-comint-get-process)
    ""))
 
@@ -284,11 +284,11 @@ CALLBACK allows chaining an action after clearing."
   ;; Need to send 2x tabs to trigger completion when there is no input
   ;; 1st tab usually does common prefix
   (when (string-empty-p input-string)
-    (comint-send-string
+    (process-send-string
      (js-comint-get-process)
      "\t"))
 
-  (comint-send-string
+  (process-send-string
    (js-comint-get-process)
    (format "%s\t" input-string)))
 
@@ -338,7 +338,7 @@ PREFIX is the original completion prefix string."
       (message "exact match output")
       ;; Completions like Array. seem to need a second tab after the response
       (if (string-suffix-p "." js-comint--completion-prefix)
-          (comint-send-string
+          (process-send-string
            (js-comint-get-process)
            "\t")
         ;; Otherwise there was no match, so reset
