@@ -381,12 +381,12 @@ Nil if point is before the current prompt."
      't))))
 
 ;;;###autoload
-(defun company-js-comint-backend (command &optional arg &rest _ignored)
+(defun company-js-comint (command &optional arg &rest _ignored)
   "Wraps node REPL completion for company."
   (interactive (list 'interactive))
   (cl-case command
     ((interactive)
-     (company-begin-backend 'company-jsc-backend))
+     (company-begin-backend 'company-js-comint))
     ((prefix)
      (when (equal major-mode 'js-comint-mode)
        (if (js-comint--should-complete)
@@ -396,7 +396,7 @@ Nil if point is before the current prompt."
      (cons :async (apply-partially #'js-comint--get-completion arg)))))
 
 (with-eval-after-load 'company
-  (cl-pushnew #'company-js-comint-backend company-backends))
+  (cl-pushnew #'company-js-comint company-backends))
 
 ;;;###autoload
 (defun js-comint-save-setup ()
@@ -596,7 +596,7 @@ If no region selected, you could manually input javascript expression."
   "Cleanup mode settings."
   (when company-backends
     (setq company-backends
-          (delete #'company-js-comint-backend company-backends))))
+          (delete #'company-js-comint company-backends))))
 
 ;;;###autoload
 (define-derived-mode js-comint-mode comint-mode "Javascript REPL"
