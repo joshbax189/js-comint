@@ -330,35 +330,34 @@ ARGUMENTS is an optional list of arguments to pass."
 
 (defun js-comint--get-completion-async (input-string callback)
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
-  (let ((cb (lambda ()
-              ;; decide whether output is complete
-              (cond
-               ((and (not (string-empty-p input-string))
-                     (js-comint--completion-looking-back-p input-string))
-                ;; Completions like Array. seem to need a second tab after the response
-                (if (string-suffix-p "." input-string)
-                    (prog1 nil ;; do not remove callback
-                      (process-send-string
-                       (js-comint-get-process)
-                       "\t"))
-                  ;; Otherwise there was no match, so reset
-                  (funcall callback nil)
-                  (js-comint--clear-input-async)
-                  't))
-               ((js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$")
-                (let ((completion-res (js-comint--process-completion-output
-                                       (with-current-buffer js-comint--completion-buffer (buffer-string))
-                                       input-string)))
-                  (funcall callback completion-res)
-                  (js-comint--clear-input-async)
-                  't))))))
-    (push `(:last-prompt-start
-            ,(car comint-last-prompt)
-            :type
-            'completion
-            :function
-            ,cb)
-          js-comint--completion-callbacks))
+  (js-comint--set-completion-callback
+   (let ((retries 0))
+    (lambda ()
+      ;; decide whether output is complete
+      (cond
+       ((and (not (string-empty-p input-string))
+             (js-comint--completion-looking-back-p input-string))
+        ;; Completions like Array. seem to need a second tab after the response
+        (if (and (string-suffix-p "." input-string)
+                 (zerop retries))
+            (prog1 nil ;; do not remove callback
+              (cl-incf retries)
+              (process-send-string
+               (js-comint-get-process)
+               "\t"))
+          ;; Otherwise there was no match, so reset
+          (funcall callback nil)
+          (js-comint--clear-input-async)
+          't))
+       ((js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$")
+        (let* ((completion-output (with-current-buffer js-comint--completion-buffer (buffer-string)))
+               (completion-res (js-comint--process-completion-output
+                                completion-output
+                                input-string)))
+          (funcall callback completion-res)
+          (js-comint--clear-input-async)
+          't)))))
+   'completion)
 
   ;; Need to send 2x tabs to trigger completion when there is no input
   ;; 1st tab usually does common prefix
