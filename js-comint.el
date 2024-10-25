@@ -353,16 +353,18 @@ ARGUMENTS is an optional list of arguments to pass."
                (js-comint-get-process)
                "\t"))
           ;; Otherwise there was no match, so reset
-          (funcall callback nil)
-          (js-comint--clear-input-async)
+          (unwind-protect
+              (funcall callback nil)
+            (js-comint--clear-input-async))
           't))
        ((js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$")
         (let* ((completion-output (with-current-buffer js-comint--completion-buffer (buffer-string)))
                (completion-res (js-comint--process-completion-output
                                 completion-output
                                 input-string)))
-          (funcall callback completion-res)
-          (js-comint--clear-input-async)
+          (unwind-protect
+              (funcall callback completion-res)
+           (js-comint--clear-input-async))
           't)))))
    'completion)
 
