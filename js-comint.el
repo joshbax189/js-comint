@@ -298,19 +298,19 @@ Each should be a plist with last-prompt-start, type, function, arguments")
         (goto-char (point-max))
         (insert output))
       ;; call only the active ones, discard others
-      (let ((eligible-callbacks (seq-filter
+      (let ((active-callbacks (seq-filter
                                  #'js-comint--callback-active-p
                                  js-comint--completion-callbacks)))
         ;; Some callbacks may add further callbacks during their execution.
         ;; Re-add any pending callbacks to avoid overwriting new callbacks.
         (setq js-comint--completion-callbacks nil)
-        (cl-loop for cb in eligible-callbacks
-                 ;; if the callback exits with non-nil, remove it
-                 do (unless (condition-case err
-                                (apply (plist-get cb :function) (plist-get cb :arguments))
-                              (t (message "%s" err)
-                                 nil))
-                      (push cb js-comint--completion-callbacks))))
+        (dolist (cb active-callbacks)
+          ;; if the callback exits with non-nil or signals, remove it
+          (unless (condition-case err
+                      (apply (plist-get cb :function) (plist-get cb :arguments))
+                    (t (prog1 t
+                         (message "Error in callback %s" (cdr err)))))
+            (push cb js-comint--completion-callbacks))))
       (unless js-comint--completion-callbacks
         (with-current-buffer js-comint--completion-buffer
           (erase-buffer)))))))
