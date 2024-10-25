@@ -262,7 +262,7 @@ PREFIX is the original completion prefix string."
 
 (defvar-local js-comint--completion-callbacks nil
   "List of pending callback.
-Each should be a plist with last-prompt-start, block, type, function, arguments")
+Each should be a plist with last-prompt-start, type, function, arguments")
 
 (defvar-local js-comint--completion-buffer nil
   "Buffer for completion output.")
@@ -278,7 +278,6 @@ Each should be a plist with last-prompt-start, block, type, function, arguments"
     (prog1 output
       (with-current-buffer js-comint--completion-buffer
         (erase-buffer))
-      ;; TODO perhaps signal the callbacks too?
       (setq js-comint--completion-callbacks nil)))
    (t
     (prog1 ""
@@ -299,7 +298,6 @@ Each should be a plist with last-prompt-start, block, type, function, arguments"
         ;; Re-add any pending callbacks to avoid overwriting new callbacks.
         (setq js-comint--completion-callbacks nil)
         (cl-loop for cb in eligible-callbacks
-                 ;; TODO block should skip later callbacks, but keep them in the loop
                  ;; if the callback exits with non-nil, remove it
                  do (unless (condition-case err
                               (apply (plist-get cb :function) (plist-get cb :arguments))
@@ -315,6 +313,20 @@ Each should be a plist with last-prompt-start, block, type, function, arguments"
   (with-current-buffer js-comint--completion-buffer
     (goto-char (point-max))
     (looking-back regexp (line-beginning-position))))
+
+(defun js-comint--set-completion-callback (callback type &optional arguments)
+  "Add CALLBACK to listen for completion output.
+TYPE is a symbol describing the callback.
+ARGUMENTS is an optional list of arguments to pass."
+  (push `(:last-prompt-start
+          ,(car comint-last-prompt)
+          :type
+          ,type
+          :function
+          ,callback
+          ,@(and arguments
+                 (list :arguments arguments)))
+          js-comint--completion-callbacks))
 
 (defun js-comint--get-completion-async (input-string callback)
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
@@ -362,20 +374,11 @@ Each should be a plist with last-prompt-start, block, type, function, arguments"
 (defun js-comint--clear-input-async ()
   "Clear input already sent to the REPL.
 This is used specifically to remove input used to trigger completion."
-  (let* ((saved-prompt (car comint-last-prompt))
-         (cb (lambda ()
-               ;; when output is complete remove self
-               ;; TODO should this block input going to the completion buffer?
-               (js-comint--completion-looking-back-p (concat js-comint-prompt "\\[[[:digit:]]+[AG]$")))))
-   (push `(:last-prompt-start
-           ,saved-prompt
-           :type
-           clear
-           :block
-           t
-           :function
-           ,cb)
-         js-comint--completion-callbacks))
+  (js-comint--set-completion-callback
+   (lambda ()
+     ;; when output is complete remove self
+     (js-comint--completion-looking-back-p (concat js-comint-prompt "\\[[[:digit:]]+[AG]$")))
+   'clear)
 
   (process-send-string
    (js-comint-get-process)
