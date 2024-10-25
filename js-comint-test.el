@@ -254,90 +254,157 @@ Array.valueOf
       "Array.toLocaleString"
       "Array.valueOf"))))
 
-(ert-deftest js-comint--completion-filter/test-discard ()
-  "Output should be discarded."
+(ert-deftest js-comint--async-output-filter/test-no-callbacks ()
+  "Output should be kept when no callbacks are active."
   (with-temp-buffer
-    (js-comint--reset-completion-state)
-    (setq js-comint--discard-output 't)
-    ;; each should be empty
-    (dolist (res (list (js-comint--completion-filter "foo")
-                       (js-comint--completion-filter "bar")
-                       (js-comint--completion-filter "[1G")))
-     (should (string-empty-p res)))
-    ;; then the the flag should be cleared
-    (should-not js-comint--discard-output)))
+    (should (equal (js-comint--async-output-filter "foo")
+                   "foo"))
+    ;; should be the same when old callbacks are used
+    (with-mock
+      (mock (js-comint--callback-active-p *) => nil)
+      (setq js-comint--completion-buffer nil
+            js-comint--completion-callbacks (list ()))
+      (should (equal (js-comint--async-output-filter "foo")
+                     "foo"))
+      ;; callbacks should be cleared too
+      (should-not js-comint--completion-callbacks))))
 
-(ert-deftest js-comint--completion-filter/test-discard-with-completion ()
-  "Output should be discarded even when completion callback is set."
+(ert-deftest js-comint--async-output-filter/test-discard ()
+  "Output should be discarded when completion callback is active."
   (with-temp-buffer
-    (js-comint--reset-completion-state)
-    (setq js-comint--discard-output 't)
-    (setq js-comint--post-completion-cb #'ignore)
-    ;; each should be empty
-    (dolist (res (list (js-comint--completion-filter "foo")
-                       (js-comint--completion-filter "bar")
-                       (js-comint--completion-filter "[1G")))
-      (should (string-empty-p res)))
-    ;; the output should not be accumulated
-    (should (string-empty-p js-comint--completion-output))))
+    ;; function ignore always returns nil, so it is never cleared
+    (setq js-comint--completion-callbacks (list '(:function ignore)))
+    (with-mock
+      (stub js-comint--callback-active-p => 't)
+      (dolist (output '("foo" "bar" "[1G"))
+        (should (string-empty-p (js-comint--async-output-filter output)))))
+    ;; text should be in completion buffer
+    (should (equal (with-current-buffer js-comint--completion-buffer (buffer-string))
+                   "foobar[1G"))
+    (should (equal js-comint--completion-callbacks
+                   (list '(:function ignore))))))
 
-(ert-deftest js-comint--completion-filter/test-no-completion ()
+(ert-deftest js-comint--async-output-filter/test-callback-error ()
+  "Callback should be removed if it signals an error."
+  (with-temp-buffer
+    (setq js-comint--completion-callbacks
+          (list (list :function (lambda () (error "This should be caught!")))))
+    (with-mock
+      (stub js-comint--callback-active-p => 't)
+      (dolist (output '("foo" "bar" "[1G"))
+        (js-comint--async-output-filter output)))
+    ;; callback should be removed
+    (should-not js-comint--completion-callbacks)))
+
+(ert-deftest js-comint--async-output-filter/test-callback-chain ()
+  "Callbacks should be able to add further callbacks."
+  (with-temp-buffer
+    (setq js-comint--completion-callbacks
+          (list (list :function (lambda ()
+                                  (push '(:function foo) js-comint--completion-callbacks)
+                                  't))))
+    (with-mock
+      (stub js-comint--callback-active-p => 't)
+      (should (string-empty-p (js-comint--async-output-filter "foo"))))
+    ;; new callback should be added
+    (should (equal js-comint--completion-callbacks
+                   (list '(:function foo))))))
+
+(ert-deftest js-comint--clear-input-async/test ()
+  "Should send correct clear command and complete on expected response."
+  (with-temp-buffer
+    (setq js-comint--completion-callbacks
+          (list '(:function always)))
+    (with-mock
+      (stub js-comint--callback-active-p => 't)
+      (mock (process-send-string * ""))
+      (js-comint--async-output-filter "foo")
+      ;; node input is "foo"
+      ;; completion buffer is empty as there are no active callbacks
+      (js-comint--clear-input-async)
+      ;; term sends a prompt
+      (should (string-empty-p (js-comint--async-output-filter "[1G[0J> [3G")))
+      ;; buffer should be empty and no active callbacks
+      (should (js-comint--completion-looking-back-p "^$"))
+      (should-not js-comint--completion-callbacks))))
+
+(ert-deftest js-comint--async-output-filter/test-no-completion ()
   "Output should be saved until string match, then fail."
   (with-mock
-    (mock (ignore nil)) ;; must be called
-    (mock (js-comint--clear-repl-input))
+    (stub js-comint--callback-active-p => 't)
+    (mock (process-send-string * *) :times 2)
     (with-temp-buffer
-      (js-comint--reset-completion-state)
-      (setq js-comint--post-completion-cb #'ignore
-            js-comint--completion-prefix "foo")
-
-      ;; each should be empty
-      (dolist (res (list (js-comint--completion-filter "f")
-                         (js-comint--completion-filter "oo")))
-        (should (string-empty-p res)))
       ;; callback should be called with nil
+      (js-comint--get-completion-async "foo" (lambda (arg) (should-not arg)))
+      (dolist (output '("f" "oo"))
+        (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
-      ;; then the the flag should be cleared
-      (should-not js-comint--post-completion-cb))))
+      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
+                     'clear)))))
 
-(ert-deftest js-comint--completion-filter/test-list-completion ()
-  "Output should be saved until control char, then list returned."
+(ert-deftest js-comint--get-completion-async/test-prop-completion-fail ()
+  "When completion fails on something that looks like an object don't hang."
   (with-mock
-    ;; callback should be called with completions
-    (mock (ignore '("foobar" "foobaz")))
-    (mock (js-comint--clear-repl-input))
+    (stub js-comint--callback-active-p => 't)
+    (mock (process-send-string * *) :times 3)
     (with-temp-buffer
-      (js-comint--reset-completion-state)
-      (setq js-comint--post-completion-cb #'ignore
-            js-comint--completion-prefix "foo")
-
-      ;; each should be empty
-      (dolist (res (list (js-comint--completion-filter "foobar foobaz")
-                         (js-comint--completion-filter "[1G[0J> foo[3G")))
-        (should (string-empty-p res)))
-
+      ;; callback should be called with nil
+      (js-comint--get-completion-async "Array." (lambda (arg) (should-not arg)))
+      (dolist (output '("A" "rray." "Array."))
+        (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
-      ;; then the the flag should be cleared
-      (should-not js-comint--post-completion-cb))))
+      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
+                     'clear)))))
 
-(ert-deftest js-comint--completion-filter/test-double-tab ()
+(ert-deftest js-comint--get-completion-async/test-user-callback-error ()
+  "Should clear even if supplied callback errors."
+  (with-mock
+    (stub js-comint--callback-active-p => 't)
+    (stub process-send-string)
+    (with-temp-buffer
+      ;; callback errors
+      (js-comint--get-completion-async "foo"
+                                       (lambda (arg) (error "Broken user callback")))
+      ;; after output the erroring callback is called with nil
+      (dolist (output '("f" "oo"))
+        (should (string-empty-p (js-comint--async-output-filter output))))
+      ;; clear should be called
+      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
+                     'clear)))))
+
+(ert-deftest js-comint--get-completion-async/test-user-callback-error-2 ()
+  "Should clear even if supplied callback errors (multiple completions)."
+  (with-mock
+    (stub js-comint--callback-active-p => 't)
+    (stub process-send-string)
+    (with-temp-buffer
+      ;; callback errors
+      (js-comint--get-completion-async "foo"
+                                       (lambda (arg) (error "Broken user callback")))
+      ;; after output the erroring callback is called with nil
+      (dolist (output '("foo bar baz\n[1G[0J> foo[3G"))
+        (should (string-empty-p (js-comint--async-output-filter output))))
+      ;; clear should be called
+      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
+                     'clear)))))
+
+(ert-deftest js-comint--get-completion-async/test-prop-completion ()
   "When completing object properties, send another tab to get completion."
   (with-mock
-    (stub js-comint-get-process)
-    (mock (comint-send-string * "\t"))
+    (stub js-comint--callback-active-p => 't)
+    (mock (process-send-string * *) :times 3)
     (with-temp-buffer
-      (js-comint--reset-completion-state)
-      (setq js-comint--post-completion-cb #'ignore
-            js-comint--completion-prefix "foo.")
+      ;; callback should be called with ("foo" "bar" "baz")
+      (js-comint--get-completion-async "Array."
+                                       (lambda (arg)
+                                         (should (equal arg '("foo" "bar" "baz")))))
+      ;; after the second tab get completion suggestions
+      (dolist (output '("A" "rray." "Array. foo bar baz\n[1G[0J> foo[3G"))
+        (should (string-empty-p (js-comint--async-output-filter output))))
+      ;; clear should be called
+      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
+                     'clear)))))
 
-      ;; each should be empty
-      (dolist (res (list (js-comint--completion-filter "f")
-                         (js-comint--completion-filter "oo.")))
-        (should (string-empty-p res)))
-      ;; after sending tab should be ready to recieve completion
-      (should js-comint--post-completion-cb)
-      (should (equal js-comint--completion-prefix "foo."))
-      (should (equal js-comint--completion-output "foo.")))))
 ;;; Company Integration Tests
 
 ;; sanity check: node should interpret ^U
