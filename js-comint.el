@@ -267,17 +267,26 @@ Each should be a plist with last-prompt-start, type, function, arguments")
 (defvar-local js-comint--completion-buffer nil
   "Buffer for completion output.")
 
+(defun js-comint--callback-active-p (callback)
+  "Non-nil if CALLBACK should be used given current prompt."
+  (equal
+   ;; marker for the prompt active when callback was created
+   (plist-get callback :last-prompt-start)
+   ;; start prompt marker, must be in comint buffer
+   (car comint-last-prompt)))
+
 (defun js-comint--async-output-filter (output)
   "Dispatches callbacks listening for comint OUTPUT."
   (cond
    ((null js-comint--completion-callbacks)
     output)
-   ((not (equal (plist-get (car js-comint--completion-callbacks) :last-prompt-start)
-                (car comint-last-prompt)))
-    ;; clear state
+   ;; Assuming most recent callbacks are at head of the list
+   ;; If the head is not active, then discard all in the list
+   ((not (js-comint--callback-active-p (car js-comint--completion-callbacks)))
     (prog1 output
-      (with-current-buffer js-comint--completion-buffer
-        (erase-buffer))
+      (when js-comint--completion-buffer
+       (with-current-buffer js-comint--completion-buffer
+         (erase-buffer)))
       (setq js-comint--completion-callbacks nil)))
    (t
     (prog1 ""
@@ -290,9 +299,7 @@ Each should be a plist with last-prompt-start, type, function, arguments")
         (insert output))
       ;; call only the active ones, discard others
       (let ((eligible-callbacks (seq-filter
-                                 (lambda (cb)
-                                   (equal (plist-get cb :last-prompt-start)
-                                          (car comint-last-prompt)))
+                                 #'js-comint--callback-active-p
                                  js-comint--completion-callbacks)))
         ;; Some callbacks may add further callbacks during their execution.
         ;; Re-add any pending callbacks to avoid overwriting new callbacks.
@@ -300,9 +307,9 @@ Each should be a plist with last-prompt-start, type, function, arguments")
         (cl-loop for cb in eligible-callbacks
                  ;; if the callback exits with non-nil, remove it
                  do (unless (condition-case err
-                              (apply (plist-get cb :function) (plist-get cb :arguments))
-                            (t (message "%s" err)
-                               nil))
+                                (apply (plist-get cb :function) (plist-get cb :arguments))
+                              (t (message "%s" err)
+                                 nil))
                       (push cb js-comint--completion-callbacks))))
       (unless js-comint--completion-callbacks
         (with-current-buffer js-comint--completion-buffer
