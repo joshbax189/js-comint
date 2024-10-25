@@ -513,12 +513,12 @@ Create a new Javascript REPL process."
            (all-paths-list (seq-remove 'string-empty-p all-paths-list))
            (local-node-path (string-join all-paths-list (js-comint--path-sep)))
            (js-comint-code (format js-comint-code-format
-                          (window-width) js-comint-prompt)))
-      (with-environment-variables (("NODE_NO_READLINE" "1")
-                                   ("NODE_PATH" local-node-path))
-        (pop-to-buffer
-         (apply 'make-comint js-comint-buffer js-comint-program-command nil
-                `(,@js-comint-program-arguments "-e" ,js-comint-code))))
+                          (window-width) js-comint-prompt))
+           ;; NOTE: it's recommended not to use NODE_PATH
+           (environment `("TERM=emacs" "NODE_NO_READLINE=1" ,(format "NODE_PATH=%s" local-node-path))))
+      (pop-to-buffer
+       (apply 'make-comint js-comint-buffer "env" nil
+              `(,@environment ,js-comint-program-command ,@js-comint-program-arguments "-e" ,js-comint-code)))
       (js-comint-mode))))
 
 ;;;###autoload

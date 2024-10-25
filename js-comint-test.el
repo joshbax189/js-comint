@@ -338,3 +338,22 @@ Array.valueOf
       (should js-comint--post-completion-cb)
       (should (equal js-comint--completion-prefix "foo."))
       (should (equal js-comint--completion-output "foo.")))))
+;;; Company Integration Tests
+
+;; sanity check: node should interpret ^U
+(ert-deftest js-comint--clear-input-async/test-integration ()
+  "Tests whether clear works in a live comint."
+  (with-new-js-comint-buffer
+    (process-send-string (get-buffer-process (current-buffer)) "5")
+    (js-comint--clear-input-async)
+    (comint-send-input)
+    (let ((output (buffer-substring-no-properties
+                   comint-last-input-end
+                   (car comint-last-prompt))))
+      ;; if it fails, node will see 5^U and fail, or see just 5 and echo it
+      (should (string-empty-p output)))))
+
+(ert-deftest js-comint/test-dumb-term ()
+  "TERM env var should not be dumb."
+  (js-comint-test-output-matches "process.env['TERM']" "emacs"))
+
