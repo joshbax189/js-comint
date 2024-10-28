@@ -205,6 +205,10 @@ reduce((prev, curr) => prev + curr, 0);"
   (should-not (js-comint--should-complete))
   (comint-kill-input)
 
+  (insert "foo() ")
+  (should-not (js-comint--should-complete))
+  (comint-kill-input)
+
   ;; (insert "let foo")
   ;; (should-not (js-comint--should-complete))
   ;; (comint-kill-input)

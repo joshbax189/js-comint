@@ -408,7 +408,7 @@ Nil if point is before the current prompt."
      nil)
     ((looking-back "\\." (line-beginning-position))
      't)
-    ((looking-back "[[:punct:]]" (line-beginning-position))
+    ((looking-back "[[:punct:][:space:]]" (line-beginning-position))
      nil)
     (t
      't))))
