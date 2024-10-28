@@ -335,6 +335,12 @@ ARGUMENTS is an optional list of arguments to pass."
                  (list :arguments arguments)))
           js-comint--completion-callbacks))
 
+(defun js-comint--complete-substring (input-string)
+  "Given a full line in INPUT-STRING return the substring to complete."
+  (if-let ((match (string-match "[[:space:]({;]+\\([[:word:].]*\\)$" input-string nil t)))
+    (string-trim (substring-no-properties input-string (1+ match)))
+    input-string))
+
 (defun js-comint--get-completion-async (input-string callback)
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
   (js-comint--set-completion-callback
@@ -423,7 +429,7 @@ Nil if point is before the current prompt."
     ((prefix)
      (when (equal major-mode 'js-comint-mode)
        (if (js-comint--should-complete)
-           (js-comint--current-input)
+           (js-comint--complete-substring (js-comint--current-input))
          'stop)))
     ((candidates)
      (cons :async (apply-partially #'js-comint--get-completion-async arg)))))

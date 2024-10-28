@@ -179,6 +179,15 @@ reduce((prev, curr) => prev + curr, 0);"
    (goto-char (point-min))
    (should (equal (js-comint--current-input) nil))))
 
+(ert-deftest js-comint--complete-substring/test ()
+  "Tests normal behavior."
+  (should (equal (js-comint--complete-substring "foo; bar")
+                 "bar"))
+  (should (equal (js-comint--complete-substring "if(tru")
+                 "tru"))
+  (should (equal (js-comint--complete-substring "for (let i of myObject.pro")
+                 "myObject.pro")))
+
 (ert-deftest js-comint--should-complete/test ()
   "Tests default behavior."
 (with-new-js-comint-buffer
