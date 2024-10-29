@@ -299,7 +299,6 @@ Each should be a plist with last-prompt-start, type, function, arguments")
     (prog1 ""
       ;; ensure the buffer is active
       (unless (bufferp js-comint--completion-buffer)
-        ;; TODO this buffer should probably be killed on exit
         (setq js-comint--completion-buffer (generate-new-buffer " *js-comint completion*" t)))
       (with-current-buffer js-comint--completion-buffer
         (goto-char (point-max))
@@ -667,6 +666,11 @@ If no region selected, you could manually input javascript expression."
     (setq company-backends
           (delete #'company-js-comint company-backends))))
 
+(defun js-comint--cleanup ()
+  "Runs after comint buffer is killed."
+  (when js-comint--completion-buffer
+      (kill-buffer js-comint--completion-buffer)))
+
 ;;;###autoload
 (define-derived-mode js-comint-mode comint-mode "Javascript REPL"
   :group 'js-comint
@@ -678,6 +682,7 @@ If no region selected, you could manually input javascript expression."
   (setq comint-input-ignoredups t)
   (add-hook 'comint-output-filter-functions 'js-comint-filter-output nil t)
   (add-hook 'comint-preoutput-filter-functions #'js-comint--async-output-filter nil t)
+  (add-hook 'kill-buffer-hook #'js-comint--cleanup nil t)
   (process-put (js-comint-get-process)
                'adjust-window-size-function (lambda (_process _windows) ()))
   (use-local-map js-comint-mode-map)
