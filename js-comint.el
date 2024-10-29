@@ -267,6 +267,12 @@ Each should be a plist with last-prompt-start, type, function, arguments")
 (defvar-local js-comint--completion-buffer nil
   "Buffer for completion output.")
 
+(defun js-comint--clear-completion-state ()
+  "Clear stored partial completions."
+  (when js-comint--completion-buffer
+    (with-current-buffer js-comint--completion-buffer
+      (erase-buffer))))
+
 (defun js-comint--callback-active-p (callback)
   "Non-nil if CALLBACK should be used given current prompt."
   (equal
@@ -284,9 +290,7 @@ Each should be a plist with last-prompt-start, type, function, arguments")
    ;; If the head is not active, then discard all in the list
    ((not (js-comint--callback-active-p (car js-comint--completion-callbacks)))
     (prog1 output
-      (when js-comint--completion-buffer
-       (with-current-buffer js-comint--completion-buffer
-         (erase-buffer)))
+      (js-comint--clear-completion-state)
       (setq js-comint--completion-callbacks nil)))
    (t
     (prog1 ""
@@ -311,9 +315,10 @@ Each should be a plist with last-prompt-start, type, function, arguments")
                     (t (prog1 t
                          (message "Error in callback %s" (cdr err)))))
             (push cb js-comint--completion-callbacks))))
-      (unless js-comint--completion-callbacks
-        (with-current-buffer js-comint--completion-buffer
-          (erase-buffer)))))))
+      (if js-comint--completion-callbacks
+          (accept-process-output (js-comint-get-process) 0.4)
+        ;; otherwise reset
+        (js-comint--clear-completion-state))))))
 
 (defun js-comint--completion-looking-back-p (regexp)
   "Call `looking-back' with REGEXP on `js-comint--completion-buffer'."
@@ -343,6 +348,7 @@ ARGUMENTS is an optional list of arguments to pass."
 
 (defun js-comint--get-completion-async (input-string callback)
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
+  (js-comint--clear-completion-state)
   (js-comint--set-completion-callback
    (let ((retries 0))
     (lambda ()
