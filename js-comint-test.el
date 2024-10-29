@@ -267,6 +267,24 @@ Array.valueOf
       "Array.toLocaleString"
       "Array.valueOf"))))
 
+(ert-deftest js-comint--process-completion-output/test-multiline-prefix ()
+  "Completion when there is a '...' prefix."
+  (should
+   (equal
+    (js-comint--process-completion-output
+     "Array.
+Array.__proto__             Array.hasOwnProperty        Array.isPrototypeOf         Array.propertyIsEnumerable  Array.toLocaleString
+Array.valueOf
+
+[1G[0J... Array.[11G"
+     "Array.")
+    '("Array.__proto__"
+      "Array.hasOwnProperty"
+      "Array.isPrototypeOf"
+      "Array.propertyIsEnumerable"
+      "Array.toLocaleString"
+      "Array.valueOf"))))
+
 (ert-deftest js-comint--async-output-filter/test-no-callbacks ()
   "Output should be kept when no callbacks are active."
   (with-temp-buffer
@@ -345,11 +363,16 @@ Array.valueOf
   "Output should be saved until string match, then fail."
   (with-mock
     (stub js-comint--callback-active-p => 't)
-    (mock (process-send-string * *) :times 2)
+    ;; 1 - complete foo
+    ;; 2 - finished test " \b"
+    ;; 3 - clear ""
+    (mock (process-send-string * *) :times 3)
     (with-temp-buffer
       ;; callback should be called with nil
       (js-comint--get-completion-async "foo" (lambda (arg) (should-not arg)))
-      (dolist (output '("f" "oo"))
+      (dolist (output '("f" "oo"               ;; output in chunks
+                        "[1G[0J> foo[3G" ;; response to " \b"
+                        ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
@@ -359,11 +382,18 @@ Array.valueOf
   "When completion fails on something that looks like an object don't hang."
   (with-mock
     (stub js-comint--callback-active-p => 't)
-    (mock (process-send-string * *) :times 3)
+    ;; 1 - complete
+    ;; 2 - send another \t
+    ;; 3 - finished test " \b"
+    ;; 4 - clear
+    (mock (process-send-string * *) :times 4)
     (with-temp-buffer
       ;; callback should be called with nil
-      (js-comint--get-completion-async "Array." (lambda (arg) (should-not arg)))
-      (dolist (output '("A" "rray." "Array."))
+      (js-comint--get-completion-async "scrog." (lambda (arg) (should-not arg)))
+      (dolist (output '("s" "crog." ;; output in chunks
+                        "scrog."    ;; response to repeat \t
+                        "[1G[0J> scrog.[3G" ;; response to " \b"
+                        ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
@@ -379,7 +409,9 @@ Array.valueOf
       (js-comint--get-completion-async "foo"
                                        (lambda (arg) (error "Broken user callback")))
       ;; after output the erroring callback is called with nil
-      (dolist (output '("f" "oo"))
+      (dolist (output '("f" "oo"
+                        "[1G[0J> foo[3G" ;; response to " \b"
+                        ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)

@@ -352,34 +352,51 @@ ARGUMENTS is an optional list of arguments to pass."
   "Complete INPUT-STRING and register CALLBACK to recieve completion output."
   (js-comint--clear-completion-state)
   (js-comint--set-completion-callback
-   (let ((retries 0))
-    (lambda ()
-      ;; decide whether output is complete
-      (cond
-       ((and (not (string-empty-p input-string))
-             (js-comint--completion-looking-back-p input-string))
-        ;; Completions like Array. seem to need a second tab after the response
-        (if (and (string-suffix-p "." input-string)
-                 (zerop retries))
-            (prog1 nil ;; do not remove callback
-              (cl-incf retries)
-              (process-send-string
-               (js-comint-get-process)
-               "\t"))
-          ;; Otherwise there was no match, so reset
-          (unwind-protect
-              (funcall callback nil)
-            (js-comint--clear-input-async))
-          't))
-       ((js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$")
-        (let* ((completion-output (with-current-buffer js-comint--completion-buffer (buffer-string)))
-               (completion-res (js-comint--process-completion-output
-                                completion-output
-                                input-string)))
-          (unwind-protect
-              (funcall callback completion-res)
-           (js-comint--clear-input-async))
-          't)))))
+   ;; callback closure
+   (let (tab-sent    ;; flag tracking repeat tabs: Array\t => \t
+         check-sent) ;; flag tracking whether check has been sent
+     (lambda ()
+       (cond
+        ;; case: exact match to input-string in output
+        ((and (not (string-empty-p input-string))
+              (js-comint--completion-looking-back-p input-string))
+         ;; Completions like "Array." need a second tab after the response
+         (cond
+          ((and (string-suffix-p "." input-string)
+                (not tab-sent))
+           (prog1 nil ;; do not remove callback
+             (setq tab-sent 't)
+             (process-send-string (js-comint-get-process) "\t")))
+           ;; Output may sometimes be staggered "Arr|ay" so the completion appears stepwise
+          ((not check-sent)
+           (prog1 nil ;; do not remove callback
+             (setq check-sent 't)
+             ;; This "wiggles" the cursor making node repeat the prompt with current input
+             (process-send-string (js-comint-get-process) " \b")))
+          ;; Otherwise there was no match (after retry).
+          ;; The wiggle should cause a prompt to be echoed, so this case likely does not occur.
+          ;; Probably useful to keep for edge cases though.
+          ('t
+           (prog1 't ;; remove callback
+             (unwind-protect
+                 (funcall callback nil)
+               (js-comint--clear-input-async))))))
+        ;; case: found a control character (usually part of a prompt)
+        ((or check-sent
+             (js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$"))
+         (let* ((completion-output (with-current-buffer js-comint--completion-buffer
+                                     (buffer-string)))
+                (completion-res (js-comint--process-completion-output
+                                 completion-output
+                                 input-string)))
+           (unwind-protect
+               (funcall callback completion-res)
+             (js-comint--clear-input-async))
+           't))
+        ;; all other cases
+        ('t
+         ;; expect that the callback will be removed
+         nil))))
    'completion)
 
   ;; Need to send 2x tabs to trigger completion when there is no input
