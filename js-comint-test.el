@@ -437,3 +437,46 @@ Array.valueOf
   "TERM env var should not be dumb."
   (js-comint-test-output-matches "process.env['TERM']" "emacs"))
 
+(ert-deftest js-comint/test-company-global ()
+  "Tests completion with an empty prompt."
+  (with-new-js-comint-buffer
+    (company-mode)
+    (sit-for 1)
+    (company-manual-begin)
+    ;; register callback to see globals
+    (company-complete-selection)
+    (should (looking-back "AbortController"))))
+
+(ert-deftest js-comint/test-company-unique-result ()
+  "Completing with a unique result.
+E.g. Arr => Array, or conso => console."
+  (with-new-js-comint-buffer
+    (company-mode)
+    (setq company-async-timeout 5)
+    (sit-for 1)
+    (insert "Arra")
+    (company-complete)
+    (should (looking-back "Array"))))
+
+(ert-deftest js-comint/test-company-complete-props ()
+  "Completing props of an object.
+E.g. should complete \"Array.\" to all properties."
+  (with-new-js-comint-buffer
+    (company-mode)
+    (sit-for 1)
+    (insert "Array.")
+    (company-manual-begin)
+    (company-complete-selection)
+    (should (looking-back "Array.__proto__"))))
+
+;; TODO also test that input is correctly cleared here, i.e. can send a string
+(ert-deftest js-comint/test-company-complete-long-line ()
+  "Completing part of a line.
+E.g. 'if (true) { console.'"
+  (with-new-js-comint-buffer
+    (company-mode)
+    (sit-for 1)
+    (insert "if (true) { console.")
+    (company-manual-begin)
+    (company-complete-selection)
+    (should (looking-back "console.__proto__"))))
