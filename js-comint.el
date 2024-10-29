@@ -238,27 +238,29 @@ Return a string representing the node version."
 (defun js-comint--process-completion-output (completion prefix)
   "Format COMPLETION string as a list of candidates.
 PREFIX is the original completion prefix string."
-  (let* ((completion-res (split-string completion nil 't))
-         (completion-res (seq-remove (apply-partially #'string-search "") completion-res)))
-    (cond
-     ;; For an exact match the response is: MATCH^M// type info^M^[[...PROMPT
-     ((equal "//" (elt completion-res 1))
-       (list (car completion-res)))
-
-     ;; When completing, e.g "console.", the prefix is included in every completion.
-     ;; For console.[name] completion, want name to display in list, but console.name as completion,
-     ;; so store original as a string property.
-     ((string-suffix-p "." prefix)
-      (cdr ;; first is always the prefix in this case
-       (seq-map
-        (lambda (x)
-          (let* ((original x)
-                 (method (string-remove-prefix prefix original)))
-            (propertize original 'completion method)))
-        completion-res)))
-
-     ('t
-      completion-res))))
+  (let* ((completion (replace-regexp-in-string "\\[[[:digit:]]+[[:alpha:]]+" "" completion))
+         (completion-lines (split-string completion "\n" 't))
+         ;; TODO or turn it off!
+         (completion-lines (seq-remove (apply-partially #'string-prefix-p "//")
+                                       completion-lines))
+         (completion-tokens (seq-mapcat (lambda (x) (split-string x nil 't)) completion-lines))
+         (trimmed-prompt (string-trim js-comint-prompt))
+         (completion-res (seq-remove (lambda (x) (or (equal x prefix)
+                                                     (equal x trimmed-prompt)
+                                                     (equal x "...")))
+                                     completion-tokens)))
+    ;; When completing, e.g "console.", the prefix is included in every completion.
+    ;; For console.[name] completion, want name to display in list, but console.name as completion,
+    ;; so store original as a string property.
+    (if (string-suffix-p "." prefix)
+        (seq-map
+         (lambda (x)
+           (let* ((original x)
+                  (method (string-remove-prefix prefix original)))
+             (propertize original 'completion method)))
+         completion-res)
+      ;; otherwise don't change the list
+      completion-res)))
 
 (defvar-local js-comint--completion-callbacks nil
   "List of pending callback.
