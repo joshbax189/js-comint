@@ -190,38 +190,38 @@ reduce((prev, curr) => prev + curr, 0);"
 
 (ert-deftest js-comint--should-complete/test ()
   "Tests default behavior."
-(with-new-js-comint-buffer
-  (insert "Arr")
-  (should (js-comint--should-complete))
-  (comint-kill-input)
+  (with-new-js-comint-buffer
+    (insert "Arr")
+    (should (js-comint--should-complete))
+    (comint-kill-input)
 
-  (insert "Array.")
-  (should (js-comint--should-complete))
-  (comint-kill-input)
+    (insert "Array.")
+    (should (js-comint--should-complete))
+    (comint-kill-input)
 
-  ;; empty line
-  (should (js-comint--should-complete))
+    ;; empty line
+    (should (js-comint--should-complete))
 
-  (insert "// a comment")
-  (should-not (js-comint--should-complete))
-  (comint-kill-input)
+    (insert "// a comment")
+    (should-not (js-comint--should-complete))
+    (comint-kill-input)
 
-  (insert "\"foo")
-  (should-not (js-comint--should-complete))
-  (comint-kill-input)
+    (insert "\"foo")
+    (should-not (js-comint--should-complete))
+    (comint-kill-input)
 
-  (insert "[1,2,")
-  (should-not (js-comint--should-complete))
-  (comint-kill-input)
+    (insert "[1,2,")
+    (should-not (js-comint--should-complete))
+    (comint-kill-input)
 
-  (insert "foo() ")
-  (should-not (js-comint--should-complete))
-  (comint-kill-input)
+    (insert "foo() ")
+    (should-not (js-comint--should-complete))
+    (comint-kill-input)
 
-  ;; (insert "let foo")
-  ;; (should-not (js-comint--should-complete))
-  ;; (comint-kill-input)
-  ))
+    ;; (insert "let foo")
+    ;; (should-not (js-comint--should-complete))
+    ;; (comint-kill-input)
+    ))
 
 (ert-deftest js-comint--process-completion-output/test-globals ()
   "Completing an empty string."
