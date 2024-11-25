@@ -179,14 +179,25 @@ reduce((prev, curr) => prev + curr, 0);"
    (goto-char (point-min))
    (should (equal (js-comint--current-input) nil))))
 
-(ert-deftest js-comint--complete-substring/test ()
-  "Tests normal behavior."
+(ert-deftest js-comint--complete-substring/test-semi-colon ()
+  "Should break at semi-colons."
   (should (equal (js-comint--complete-substring "foo; bar")
-                 "bar"))
+                 "bar")))
+
+(ert-deftest js-comint--complete-substring/test-brackets ()
+  "Should break at opening brackets."
   (should (equal (js-comint--complete-substring "if(tru")
-                 "tru"))
+                 "tru")))
+
+(ert-deftest js-comint--complete-substring/test-words ()
+  "Should break at words."
   (should (equal (js-comint--complete-substring "for (let i of myObject.pro")
                  "myObject.pro")))
+
+(ert-deftest js-comint--complete-substring/test-braces ()
+  "Should break at opening braces."
+  (should (equal (js-comint--complete-substring "if (true) { cons")
+                 "cons")))
 
 (ert-deftest js-comint--should-complete/test ()
   "Tests default behavior."
