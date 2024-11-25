@@ -250,18 +250,7 @@ PREFIX is the original completion prefix string."
                                                      (equal x trimmed-prompt)
                                                      (equal x "...")))
                                      completion-tokens)))
-    ;; When completing, e.g "console.", the prefix is included in every completion.
-    ;; For console.[name] completion, want name to display in list, but console.name as completion,
-    ;; so store original as a string property.
-    (if (string-suffix-p "." prefix)
-        (seq-map
-         (lambda (x)
-           (let* ((original x)
-                  (method (string-remove-prefix prefix original)))
-             (propertize original 'completion method)))
-         completion-res)
-      ;; otherwise don't change the list
-      completion-res)))
+    completion-res))
 
 (defvar-local js-comint--completion-callbacks nil
   "List of pending callback.
