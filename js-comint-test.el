@@ -360,6 +360,7 @@ Array.valueOf
           (list '(:function always)))
     (with-mock
       (stub js-comint--callback-active-p => 't)
+      (stub js-comint--current-input => "")
       (mock (process-send-string * ""))
       (js-comint--async-output-filter "foo")
       ;; node input is "foo"
@@ -375,6 +376,7 @@ Array.valueOf
   "Output should be saved until string match, then fail."
   (with-mock
     (stub js-comint--callback-active-p => 't)
+    (stub js-comint--current-input => "foo")
     ;; 1 - complete foo
     ;; 2 - finished test " \b"
     ;; 3 - clear ""
@@ -393,11 +395,29 @@ Array.valueOf
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
                      'clear)))))
 
+(ert-deftest-async js-comint--async-output-filter/test-stale-callback (done)
+  "Callback should not be called if input has changed."
+  (with-new-js-comint-buffer
+    (with-mock
+      ;; input is "Array" when callback is set
+      (mock (js-comint--current-input) => "Array")
+      (js-comint--get-completion-async "Array"
+                                       (lambda (arg)
+                                         ;; callback should be called with nil or not called
+                                         (funcall done (when arg
+                                                         (format "expected %s to be nil" arg))))))
+    ;; bump output, input is now ""
+    (js-comint--async-output-filter "")
+    ;; async-output-filter should discard the previous callback as it doesn't apply
+    (funcall done (when js-comint--completion-callbacks
+                    (format "expected %s to be nil" js-comint--completion-callbacks)))))
+
 ;; TODO this is broken, both in test and in use
 (ert-deftest-async js-comint--get-completion-async/test-prop-completion-fail (done)
   "When completion fails on something that looks like an object don't hang."
   (with-mock
     (stub js-comint--callback-active-p => 't)
+    (stub js-comint--current-input => "scrog.")
     ;; 1 - complete
     ;; 2 - send another \t
     ;; 3 - finished test " \b"
@@ -422,6 +442,7 @@ Array.valueOf
   "Should clear even if supplied callback errors."
   (with-mock
     (stub js-comint--callback-active-p => 't)
+    (stub js-comint--current-input => "foo")
     (stub process-send-string)
     (with-temp-buffer
       ;; callback errors
@@ -440,6 +461,7 @@ Array.valueOf
   "Should clear even if supplied callback errors (multiple completions)."
   (with-mock
     (stub js-comint--callback-active-p => 't)
+    (stub js-comint--current-input => "foo")
     (stub process-send-string)
     (with-temp-buffer
       ;; callback errors
@@ -456,6 +478,7 @@ Array.valueOf
   "When completing object properties, send another tab to get completion."
   (with-mock
     (stub js-comint--callback-active-p => 't)
+    (stub js-comint--current-input => "Array.")
     (mock (process-send-string * *) :times 3)
     (with-temp-buffer
       ;; callback should be called with ("foo" "bar" "baz")
@@ -532,3 +555,14 @@ E.g. 'if (true) { console.'"
     (company-manual-begin)
     (company-complete-selection)
     (should (looking-back "console.__proto__"))))
+
+(ert-deftest js-comint/test-company-quick-typing ()
+  "When completion is triggered while one is already running."
+  (with-new-js-comint-buffer
+    (company-mode)
+    (sit-for 1)
+    (insert "scrog.")
+    (company-manual-begin)
+    (insert "foo")
+    (company-manual-begin)
+    (should (looking-back "scrog.foo"))))

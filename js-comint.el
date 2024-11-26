@@ -254,7 +254,8 @@ PREFIX is the original completion prefix string."
 
 (defvar-local js-comint--completion-callbacks nil
   "List of pending callback.
-Each should be a plist with last-prompt-start, type, function, arguments")
+Each should be a plist with last-prompt-start, input-string, type,
+function, arguments")
 
 (defvar-local js-comint--completion-buffer nil
   "Buffer for completion output.")
@@ -267,11 +268,18 @@ Each should be a plist with last-prompt-start, type, function, arguments")
 
 (defun js-comint--callback-active-p (callback)
   "Non-nil if CALLBACK should be used given current prompt."
-  (equal
-   ;; marker for the prompt active when callback was created
-   (plist-get callback :last-prompt-start)
-   ;; start prompt marker, must be in comint buffer
-   (car comint-last-prompt)))
+  (and
+   (equal
+    ;; marker for the prompt active when callback was created
+    (plist-get callback :last-prompt-start)
+    ;; start prompt marker, must be in comint buffer
+    (car comint-last-prompt))
+   ;; check input-string
+   (or
+    ;; "clear" callbacks always fire
+    (equal 'clear (plist-get callback :type))
+    ;; otherwise, if inputs are different, then not active
+    (equal (js-comint--current-input) (plist-get callback :input-string)))))
 
 (defun js-comint--async-output-filter (output)
   "Dispatches callbacks listening for comint OUTPUT."
@@ -323,13 +331,15 @@ TYPE is a symbol describing the callback.
 ARGUMENTS is an optional list of arguments to pass."
   (push `(:last-prompt-start
           ,(car comint-last-prompt)
+          :input-string
+          ,(js-comint--current-input)
           :type
           ,type
           :function
           ,callback
           ,@(and arguments
                  (list :arguments arguments)))
-          js-comint--completion-callbacks))
+        js-comint--completion-callbacks))
 
 (defun js-comint--complete-substring (input-string)
   "Given a full line in INPUT-STRING return the substring to complete."
