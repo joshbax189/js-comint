@@ -17,4 +17,5 @@
 (development
  (depends-on "el-mock")
  (depends-on "nvm")
- (depends-on "company"))
+ (depends-on "company")
+ (depends-on "ert-async"))

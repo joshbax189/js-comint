@@ -3,6 +3,7 @@
 (require 'js-comint)
 (require 'ert)
 (require 'el-mock)
+(require 'ert-async)
 (require 'company) ;; for should-complete
 
 (defun js-comint-test-output-matches (input regex)
@@ -370,7 +371,7 @@ Array.valueOf
       (should (js-comint--completion-looking-back-p "^$"))
       (should-not js-comint--completion-callbacks))))
 
-(ert-deftest js-comint--async-output-filter/test-no-completion ()
+(ert-deftest-async js-comint--async-output-filter/test-no-completion (done)
   "Output should be saved until string match, then fail."
   (with-mock
     (stub js-comint--callback-active-p => 't)
@@ -379,17 +380,21 @@ Array.valueOf
     ;; 3 - clear ""
     (mock (process-send-string * *) :times 3)
     (with-temp-buffer
-      ;; callback should be called with nil
-      (js-comint--get-completion-async "foo" (lambda (arg) (should-not arg)))
+      (js-comint--get-completion-async "foo"
+                                       (lambda (arg)
+                                         ;; callback should be called with nil
+                                         (funcall done (when arg
+                                                         (format "expected %s to be nil" arg)))))
       (dolist (output '("f" "oo"               ;; output in chunks
-                        "[1G[0J> foo[3G" ;; response to " \b"
+                        " [1G[0J> foo[3G" ;; response to " \b"
                         ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
                      'clear)))))
 
-(ert-deftest js-comint--get-completion-async/test-prop-completion-fail ()
+;; TODO this is broken, both in test and in use
+(ert-deftest-async js-comint--get-completion-async/test-prop-completion-fail (done)
   "When completion fails on something that looks like an object don't hang."
   (with-mock
     (stub js-comint--callback-active-p => 't)
@@ -399,11 +404,14 @@ Array.valueOf
     ;; 4 - clear
     (mock (process-send-string * *) :times 4)
     (with-temp-buffer
-      ;; callback should be called with nil
-      (js-comint--get-completion-async "scrog." (lambda (arg) (should-not arg)))
+      (js-comint--get-completion-async "scrog."
+                                       (lambda (arg)
+                                         ;; callback should be called with nil
+                                         (funcall done (when arg
+                                                         (format "expected %s to be nil" arg)))))
       (dolist (output '("s" "crog." ;; output in chunks
                         "scrog."    ;; response to repeat \t
-                        "[1G[0J> scrog.[3G" ;; response to " \b"
+                        " [1G[0J> scrog.[3G" ;; response to " \b"
                         ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
@@ -421,7 +429,7 @@ Array.valueOf
                                        (lambda (arg) (error "Broken user callback")))
       ;; after output the erroring callback is called with nil
       (dolist (output '("f" "oo"
-                        "[1G[0J> foo[3G" ;; response to " \b"
+                        " [1G[0J> foo[3G" ;; response to " \b"
                         ))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
@@ -444,7 +452,7 @@ Array.valueOf
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
                      'clear)))))
 
-(ert-deftest js-comint--get-completion-async/test-prop-completion ()
+(ert-deftest-async js-comint--get-completion-async/test-prop-completion (done)
   "When completing object properties, send another tab to get completion."
   (with-mock
     (stub js-comint--callback-active-p => 't)
@@ -453,9 +461,11 @@ Array.valueOf
       ;; callback should be called with ("foo" "bar" "baz")
       (js-comint--get-completion-async "Array."
                                        (lambda (arg)
-                                         (should (equal arg '("foo" "bar" "baz")))))
+                                         (if (equal arg '("foo" "bar" "baz"))
+                                             (funcall done)
+                                           (funcall done (format "error %s should be '(\"foo\" \"bar\" \"baz\")" arg)))))
       ;; after the second tab get completion suggestions
-      (dolist (output '("A" "rray." "Array. foo bar baz\n[1G[0J> foo[3G"))
+      (dolist (output '("A" "rray." "foo bar baz\n[1G[0J> Array.[3G"))
         (should (string-empty-p (js-comint--async-output-filter output))))
       ;; clear should be called
       (should (equal (plist-get (car js-comint--completion-callbacks) :type)
@@ -512,7 +522,6 @@ E.g. should complete \"Array.\" to all properties."
     (company-complete-selection)
     (should (looking-back "Array.__proto__"))))
 
-;; TODO also test that input is correctly cleared here, i.e. can send a string
 (ert-deftest js-comint/test-company-complete-long-line ()
   "Completing part of a line.
 E.g. 'if (true) { console.'"
