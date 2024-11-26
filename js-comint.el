@@ -343,7 +343,7 @@ ARGUMENTS is an optional list of arguments to pass."
 
 (defun js-comint--complete-substring (input-string)
   "Given a full line in INPUT-STRING return the substring to complete."
-  (if-let ((match (string-match "[[:space:]({;]\\([[:word:].]*\\)$" input-string nil t)))
+  (if-let ((match (string-match "[[:space:](\\[{;]\\([[:word:].]*\\)$" input-string nil t)))
     (string-trim (substring-no-properties input-string (1+ match)))
     input-string))
 
@@ -358,7 +358,7 @@ ARGUMENTS is an optional list of arguments to pass."
        (cond
         ;; case: exact match to input-string in output
         ((and (not (string-empty-p input-string))
-              (js-comint--completion-looking-back-p input-string))
+              (js-comint--completion-looking-back-p (regexp-quote input-string)))
          ;; Completions like "Array." need a second tab after the response
          (cond
           ((and (string-suffix-p "." input-string)
