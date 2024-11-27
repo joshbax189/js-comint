@@ -412,7 +412,6 @@ Array.valueOf
     (funcall done (when js-comint--completion-callbacks
                     (format "expected %s to be nil" js-comint--completion-callbacks)))))
 
-;; TODO this is broken, both in test and in use
 (ert-deftest-async js-comint--get-completion-async/test-prop-completion-fail (done)
   "When completion fails on something that looks like an object don't hang."
   (with-mock
@@ -429,14 +428,12 @@ Array.valueOf
                                          ;; callback should be called with nil
                                          (funcall done (when arg
                                                          (format "expected %s to be nil" arg)))))
-      (dolist (output '("s" "crog." ;; output in chunks
-                        "scrog."    ;; response to repeat \t
-                        " [1G[0J> scrog.[3G" ;; response to " \b"
-                        ))
+      (dolist (output '("s" "crog."))
         (should (string-empty-p (js-comint--async-output-filter output))))
-      ;; clear should be called
-      (should (equal (plist-get (car js-comint--completion-callbacks) :type)
-                     'clear)))))
+      ;; no response to repeat \t
+      ;; after some delay, send answer to wiggle
+      (sleep-for 2)
+      (should (string-empty-p (js-comint--async-output-filter " [1G[0J> scrog.[3G"))))))
 
 (ert-deftest js-comint--get-completion-async/test-user-callback-error ()
   "Should clear even if supplied callback errors."

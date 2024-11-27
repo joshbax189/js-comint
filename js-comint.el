@@ -352,8 +352,9 @@ ARGUMENTS is an optional list of arguments to pass."
   (js-comint--clear-completion-state)
   (js-comint--set-completion-callback
    ;; callback closure
-   (let (tab-sent    ;; flag tracking repeat tabs: Array\t => \t
-         check-sent) ;; flag tracking whether check has been sent
+   (let (tab-sent   ;; flag tracking repeat tabs: Array\t => \t
+         check-sent ;; flag tracking whether check has been sent
+         finished)  ;; flag tracking if 'callback' has been called, referred to by inner closures
      (lambda ()
        (cond
         ;; case: exact match to input-string in output
@@ -365,8 +366,15 @@ ARGUMENTS is an optional list of arguments to pass."
                 (not tab-sent))
            (prog1 nil ;; do not remove callback
              (setq tab-sent 't)
-             (process-send-string (js-comint-get-process) "\t")))
-           ;; Output may sometimes be staggered "Arr|ay" so the completion appears stepwise
+             ;; When completing "Array." this will get a list of props
+             (process-send-string (js-comint-get-process) "\t")
+             ;; When the completion does not exist, e.g. "foo." there is no response to this tab
+             ;; Instead, schedule a callback that produces a prompt, e.g. "> foo."
+             ;; This might happen after completion is finished, either by other input or clearing,
+             ;; so check to avoid adding garbage output.
+             (run-at-time 1 nil (lambda () (unless (or finished (not js-comint--completion-callbacks))
+                                             (process-send-string (js-comint-get-process) " \b"))))))
+          ;; Output may sometimes be staggered "Arr|ay" so the completion appears stepwise
           ((not check-sent)
            (prog1 nil ;; do not remove callback
              (setq check-sent 't)
@@ -382,7 +390,8 @@ ARGUMENTS is an optional list of arguments to pass."
                (js-comint--clear-input-async))))))
         ;; case: found a control character (usually part of a prompt)
         ((or check-sent
-             (js-comint--completion-looking-back-p "\\[[[:digit:]]+[AG]$"))
+             (js-comint--completion-looking-back-p "\\[[[:digit:]]+[AJG]$"))
+         (setq finished 't)
          (let* ((completion-output (with-current-buffer js-comint--completion-buffer
                                      (buffer-string)))
                 (completion-res (js-comint--process-completion-output
