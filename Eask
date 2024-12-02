@@ -13,6 +13,7 @@
 (source "melpa")
 
 (depends-on "emacs" "28.1")
+(depends-on "cape")
 
 (development
  (depends-on "el-mock")

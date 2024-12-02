@@ -9,7 +9,7 @@
 ;;; Created: 15 Feb 2014
 ;;; Version: 1.2.0
 ;;; URL: https://github.com/redguardtoo/js-comint
-;;; Package-Requires: ((emacs "28.1"))
+;;; Package-Requires: ((emacs "28.1") ("cape"))
 ;;; Keywords: javascript, node, inferior-mode, convenience
 
 ;; This file is NOT part of GNU Emacs.
@@ -151,6 +151,7 @@ Either nil or a list (VERSION-STRING PATH).")
 
 (declare-function nvm--installed-versions "nvm.el" ())
 (declare-function nvm--find-exact-version-for "nvm.el" (short))
+(declare-function cape-company-to-capf "cape.el" (capf))
 
 ;; company.el declarations
 (defvar company-backends)
@@ -691,6 +692,11 @@ If no region selected, you could manually input javascript expression."
   (add-hook 'comint-output-filter-functions 'js-comint-filter-output nil t)
   (add-hook 'comint-preoutput-filter-functions #'js-comint--async-output-filter nil t)
   (add-hook 'kill-buffer-hook #'js-comint--cleanup nil t)
+  ;; use CAPE to provide native auto-completion if company is not available
+  (unless (featurep 'company)
+    (require 'cape)
+    (setq-local completion-at-point-functions
+                (cape-company-to-capf #'company-js-comint)))
   (process-put (js-comint-get-process)
                'adjust-window-size-function (lambda (_process _windows) ()))
   (use-local-map js-comint-mode-map)
